@@ -1,0 +1,3 @@
+E-MAIL 1=<re.Match object; span=(55, 71), match='deepak@gmail.com'>
+E-MAIL 2=<re.Match object; span=(174, 187), match='deepak@dt.com'>
+E-MAIL 3=<re.Match object; span=(212, 235), match='dt123@codewithharry.com'>
