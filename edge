@@ -1,11 +1,5 @@
 #!/bin/bash
 
-vip_ip=$1
-token=$2
-token=`cat /tmp/edge_join_token`
-echo 'token:' $token
-echo 'vip_ip:' $vip_ip
-
 echo -e "Update..."
 sudo apt update -y
 
@@ -95,7 +89,7 @@ sudo wget https://github.com/kubeedge/kubeedge/releases/download/v1.16.0/keadm-v
 sudo tar -zxvf keadm-v1.16.0-linux-amd64.tar.gz
 sudo cp keadm-v1.16.0-linux-amd64/keadm/keadm /usr/local/bin/keadm
 
-sudo keadm join --cloudcore-ipport=$vip_ip:10000 --edgenode-name=$(cat /proc/sys/kernel/hostname) --token=$token --remote-runtime-endpoint=unix:///run/containerd/containerd.sock --cgroupdriver=systemd --kubeedge-version=v1.16.0
+sudo keadm join --cloudcore-ipport=52.234.39.80:10000 --edgenode-name=$(cat /proc/sys/kernel/hostname) --token=2ebfb6ad49e2caf1864b04d32d59e4dba9ff3b8838cc34b431f28d4e1f06d2c7.eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3MzcyODkyNDl9.JGdDx2LSmzAkyAeO7vBYbOfaJv4G-aVM1oRm7Tyszrg --remote-runtime-endpoint=unix:///run/containerd/containerd.sock --cgroupdriver=systemd --kubeedge-version=v1.16.0
 
 sudo sed -i '/edgeStream/ {N;s/\(enable: \).*/\1true/}' /etc/kubeedge/config/edgecore.yaml
 sudo sed -i '/metaServer:/,/enable:/s/\(enable: \).*/\1true/' /etc/kubeedge/config/edgecore.yaml
