@@ -1,0 +1,131 @@
+#!/bin/bash
+
+echo -e "Update..."
+sudo apt update -y
+
+echo -e "Install git and curl..."
+sudo apt install git curl -y 
+
+echo "Installing Containerd as the container runtime..."
+# Function to check if a command is available
+command_exists() {
+    command -v "$1" >/dev/null 2>&1
+}
+# Check if containerd is already installed
+if ! command_exists containerd; then
+    # Download and extract containerd binaries
+    sudo wget --no-check-certificate https://github.com/containerd/containerd/releases/download/v1.7.13/containerd-1.7.13-linux-amd64.tar.gz
+    #sudo wget https://github.com/containerd/containerd/releases/download/v1.7.13/containerd-1.7.13-linux-amd64.tar.gz
+    sudo tar -C /usr/local -xzvf containerd-1.7.13-linux-amd64.tar.gz
+    # Download containerd service file
+    sudo wget --no-check-certificate https://raw.githubusercontent.com/containerd/containerd/main/containerd.service -O /usr/lib/systemd/system/containerd.service
+    # Create the containerd config directory
+    sudo mkdir -p /etc/containerd
+    # Configure containerd
+    touch /etc/containerd/config.toml
+    if ! grep -q 'SystemdCgroup = true' /etc/containerd/config.toml; then
+        sudo containerd config default | sudo tee /etc/containerd/config.toml >/dev/null 2>&1
+    fi
+    sudo sed -i 's/SystemdCgroup \= false/SystemdCgroup \= true/g' /etc/containerd/config.toml
+    # Reload systemd and start containerd
+    sudo systemctl daemon-reload
+    sudo systemctl unmask containerd.service
+    sudo systemctl enable --now containerd
+    rm containerd-1.7.13-linux-amd64.tar.gz
+else
+    sudo echo "Containerd is already installed."
+fi
+
+echo "Install Runc..."
+# Check if runc is already installed
+if ! command_exists runc; then
+    sudo wget https://github.com/opencontainers/runc/releases/download/v1.1.12/runc.amd64
+    sudo install -m 755 runc.amd64 /usr/local/sbin/runc
+else
+    sudo echo "Runc is already installed."
+fi
+
+echo -e "Install Cni Plugin..."
+sudo wget https://github.com/containernetworking/plugins/releases/download/v1.4.0/cni-plugins-linux-amd64-v1.4.0.tgz
+sudo mkdir -p /opt/cni/bin
+sudo tar Cxzvf /opt/cni/bin cni-plugins-linux-amd64-v1.4.0.tgz
+cd /etc/cni/net.d/
+
+echo -e "Configuring Containerd Config..."
+cat << EOF | sudo tee /etc/cni/net.d/10-containerd-net.conflist
+{
+  "cniVersion": "1.0.0",
+  "name": "containerd-net",
+  "plugins": [
+    {
+      "type": "bridge",
+      "bridge": "cni0",
+      "isGateway": true,
+      "ipMasq": true,
+      "promiscMode": true,
+      "ipam": {
+        "type": "host-local",
+        "ranges": [
+          [{
+            "subnet": "10.216.3.0/24"
+          }]
+        ],
+        "routes": [
+          { "dst": "0.0.0.0/0" }
+        ]
+      }
+    },
+    {
+      "type": "portmap",
+      "capabilities": {"portMappings": true}
+    }
+  ]
+}
+EOF
+
+# join edge node to master
+cd
+sudo wget https://github.com/kubeedge/kubeedge/releases/download/v1.16.0/keadm-v1.16.0-linux-amd64.tar.gz
+sudo tar -zxvf keadm-v1.16.0-linux-amd64.tar.gz
+sudo cp keadm-v1.16.0-linux-amd64/keadm/keadm /usr/local/bin/keadm
+
+sudo keadm join --cloudcore-ipport=52.234.39.80:10000 --edgenode-name=$(cat /proc/sys/kernel/hostname) --token=2ebfb6ad49e2caf1864b04d32d59e4dba9ff3b8838cc34b431f28d4e1f06d2c7.eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3Mzc1MjI4OTF9.j0R6yOSsMbw_hHeRUGfGtNm7WaG5MfAcmm9GtrwNqSE --remote-runtime-endpoint=unix:///run/containerd/containerd.sock --cgroupdriver=systemd --kubeedge-version=v1.16.0
+
+sudo sed -i '/edgeStream/ {N;s/\(enable: \).*/\1true/}' /etc/kubeedge/config/edgecore.yaml
+sudo sed -i '/metaServer:/,/enable:/s/\(enable: \).*/\1true/' /etc/kubeedge/config/edgecore.yaml
+sudo sed -i '71 a  \\      clusterDNS:' /etc/kubeedge/config/edgecore.yaml
+sudo sed -i '72 a  \\      - 169.254.96.16' /etc/kubeedge/config/edgecore.yaml
+sudo systemctl restart edgecore.service
+
+echo "Installing helm..."
+if ! sudo helm version &> /dev/null; then
+    curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
+    chmod 700 get_helm.sh
+    ./get_helm.sh
+    rm -rf get_helm.sh
+    sudo helm version
+else
+    sudo echo "Helm already installed"
+fi
+
+echo "Applying telegraf"
+if ! command -v telegraf &> /dev/null; then
+    sudo echo -e "Installing telegraf..."
+    sudo apt install gnupg -y
+    sudo apt install lsb-release -y
+    sudo apt-get update -y
+    cat <<EOF | sudo tee /etc/apt/sources.list.d/influxdata.list
+deb https://repos.influxdata.com/ubuntu $(lsb_release -cs) stable
+EOF
+    sudo curl -fsSL https://repos.influxdata.com/influxdata-archive_compat.key | gpg --dearmor | sudo tee  /etc/apt/trusted.gpg.d/influxdata-archive_compat.gpg > /dev/null
+    sudo curl -sL https://repos.influxdata.com/influxdb.key | sudo apt-key add -
+    sudo curl -fsSL https://repos.influxdata.com/influxdata-archive_compat.key | gpg --dearmor | sudo tee  /etc/apt/trusted.gpg.d/influxdata-archive_compat.gpg > /dev/null
+    sudo apt update -y
+    sudo apt install telegraf=1.26.0-1
+    sudo deluser telegraf root
+    sudo usermod -aG root telegraf
+else
+    sudo echo "Telegraf is already installed."
+fi
+
+echo 'Finish...'
