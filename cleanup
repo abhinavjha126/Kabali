@@ -1,0 +1,103 @@
+#!/bin/bash
+
+sudo keadm reset --force
+sudo rm -rf /etc/kubeedge/
+sudo rm -rf /etc/cni/net.d/10-containerd-net.conflist
+
+# Remove containerd and runc
+sudo apt install ca-certificates -y
+sudo rm -rf /usr/local/bin/containerd*
+sudo rm /usr/lib/systemd/system/containerd.service
+sudo rm -rf /etc/containerd
+sudo systemctl disable --now containerd
+sudo rm containerd-1.7.13-linux-amd64.tar.gz
+sudo rm /etc/containerd/config.toml
+sudo rm /usr/local/sbin/runc
+sudo rm -r /opt/cni/bin/
+sudo rm -r /etc/cni/net.d/
+sudo rm runc.amd64
+sudo systemctl stop containerd
+sudo systemctl disable containerd
+sudo rm $(which containerd)
+sudo rm -rf /etc/containerd /var/lib/containerd
+sudo apt-get remove docker-ce -y
+sudo dpkg --configure -a
+sudo apt-get purge docker-ce -y --allow-change-held-packages
+sudo apt-get remove containerd.io -y
+sudo apt-get remove containerd -y
+sudo apt-get autoremove -y
+ps aux | grep containerd
+
+# Removing telegraf
+sudo systemctl stop telegraf
+sudo rm -rf /etc/telegraf/telegraf.conf
+sudo apt purge telegraf -y
+sudo apt remove telegraf -y
+
+# Removing docker if installed
+sudo apt install ca-certificates -y
+sudo systemctl stop docker
+sudo systemctl disable docker
+sudo apt remove -y docker.io
+sudo apt-get purge -y docker.io
+sudo apt-get autoremove -y
+
+# Remove git curl
+sudo apt install ca-certificates -y
+sudo apt remove -y git curl
+sudo dpkg --configure -a
+sudo apt-get purge -y git curl --allow-change-held-packages
+sudo apt-get autoremove -y
+
+sleep 30
+
+sudo apt install ca-certificates -y
+sudo killall apt apt-get
+sudo apt update -y
+
+# Remove policy added in azure
+sudo rm /usr/sbin/policy-rc.d
+sudo snap remove helm -y
+sudo apt remove helm -y
+sudo modprobe -r overlay
+sudo modprobe -r br_netfilter
+sudo rm /etc/modules-load.d/containerd.conf
+sudo rm /etc/sysctl.d/kubernetes.conf
+sudo sed -i '/net.ipv4.ip_forward=1/s/^#//g' /etc/sysctl.conf
+sudo sed -i '/net.ipv4.ip_forward=1/d' /etc/sysctl.conf
+sudo sed -i '/net.ipv4.ip_nonlocal_bind = 1/d' /etc/sysctl.conf
+
+sudo rm /usr/local/bin/helm
+sudo rm -rf ~/.helm
+sudo rm -rf ~/.cache/helm
+sudo rm -rf ~/.local/share/helm
+sudo rm /usr/sbin/helm
+
+# Remove sudoers data that has been added
+sudo cp /etc/sudoers.bak /etc/sudoers
+sudo rm /etc/sudoers.bak
+sudo -S sed -i 's/%sudo\s*ALL=(ALL:ALL) NOPASSWD: ALL/%sudo ALL=(ALL:ALL) ALL/g' /etc/sudoers
+
+# Removing iscsid
+sudo systemctl stop iscsid.socket iscsid.service
+sudo service open-iscsi stop
+sudo systemctl stop open-iscsi
+sudo systemctl disable iscsid.socket iscsid.service
+sudo sleep 10
+sudo dpkg --configure -a
+sudo rm -rf /var/lib/apt/lists/lock
+sudo rm -rf /var/cache/apt/archives/lock
+sudo apt install ca-certificates -y
+sudo dpkg --configure -a
+#sudo apt-get remove -y open-iscsi 
+sudo sleep 60
+sudo dpkg --configure -a
+#sudo apt-get purge -y open-iscsi --allow-change-held-packages
+sudo rm -rf /etc/kubeedge/
+sudo rm -rf /etc/apt/sources.list.d/influxdata.list
+
+sudo apt install ca-certificates -y
+sudo apt update -y
+
+echo "Cleanup complete!"
+sudo reboot
